@@ -1,7 +1,7 @@
 # PoloTrader
 CryptoCurrency trader using Python, NumPy, and Pandas on the Poloniex exchange
 
-Right now the code just analyses the data, while in the future I would like to make decisions and trade on this analysis.
+Right now the code just analyzes the data, while in the future I would like to make decisions and trade on this analysis.
 Here's what it does:
 - Grabs the list of currencies
 - Gets the candlestick data for the last 24 hours for each currency
