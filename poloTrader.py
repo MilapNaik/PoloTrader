@@ -2,6 +2,7 @@
 
 from poloWrapper import poloniex
 from twilioWrapper import twilio as tw
+import logging
 import pandas as pd
 import numpy as np
 import json, csv
@@ -13,7 +14,14 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 
+
+# Setup Logging
+logging.basicConfig(filename='poloTrader.log', level=logging.DEBUG,
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
+
 # Creating an instance of the Polo class with our secrets.json file
+logging.info('opening secrest.json')
 with open("secrets.json") as secrets_file:
     secrets = json.load(secrets_file)
     secrets_file.close()
@@ -30,18 +38,27 @@ MY_ADDRESS = secrets['myEmail']
 PASSWORD = secrets['emailSecret']
 
 TIMER = 600
+logging.info('TIMER set to ' + str(TIMER))
 # Boolean values
 PLOT_DATA = True
-REPEATE_SCRIPT = True
-SEND_SMS = True
-SEND_EMAIL = True
-VERBOSE = False
+REPEATE_SCRIPT = False
+SEND_SMS = False
+SEND_EMAIL = False
+VERBOSE = True
+DATA_PERIOD = 18000 #18000=5hrs, 86400=24hrs
+TIME_ZONE = 'Canada/Pacific'
 
 def analyzeVolume():
+
+	logging.debug('Entered analyzeVolume()')
 	# polo = poloniex(APIKey, Secret)
 	volume = pd.DataFrame(polo.return24Volume())
+	#return volume for only previous X hours
+	volume = volume.drop
 
 def setCurrencyList():
+
+	logging.debug('Entered setCurrencyList()')
 	# polo = poloniex(APIKey, Secret)
 	currencyList = pd.DataFrame(polo.return24Volume())
 	currencyList = pd.DataFrame(currencyList.index.tolist(), columns=['Currencies'])
@@ -52,12 +69,14 @@ def setCurrencyList():
 	return currencyList
 
 def analyzeChart():
+	logging.debug('Entered analyzeChart()')
 	# polo = poloniex(APIKey, Secret)
 	timestamp = int(time.time())
 	currencyList = setCurrencyList()
 
 	# Get dates and first currency data, massage data into something usable
 	prices = get_close_chart(currencyList.iloc[0,0], timestamp)
+	print "currencyList.iloc 0 0"
 	print currencyList.iloc[0][0]
 	currencyList.drop(currencyList.index[0], inplace=True)
 	frames = [prices]
@@ -81,8 +100,8 @@ def analyzeChart():
 	for coin in maxCoins:
 		dfs.append(get_close_chart(coin, timestamp))
 
-	if VERBOSE : df.to_csv('df.csv')
-
+	if VERBOSE : dfs[0].to_csv('dfs.csv')
+	
 	# Reporting
 	if PLOT_DATA: plot_data(dfs, maxCoins, timestamp)
 	if SEND_SMS: send_sms(text)
@@ -94,6 +113,7 @@ def analyzeChart():
 # print cr, adr, sddr, sr
 def compute_portfolio_stats(normed_vals, rfr = 0, sf = 252):
 	"""Return portfolio stats, using values"""
+	logging.debug('Entered compute_portfolio_stats(%s, %s, %s)', str(normed_vals), str(rfr), str(sf))
 	portfolio_vals = normed_vals.sum(axis=1)
 	daily_returns = (portfolio_vals[1:] / portfolio_vals[:-1].values) - 1
 
@@ -105,6 +125,8 @@ def compute_portfolio_stats(normed_vals, rfr = 0, sf = 252):
 	return cr, adr, sddr, sr
 	
 def get_max_close(normed_vals):
+
+	logging.debug('Entered get_max_close(%s, %s, %s)', str(normed_vals))
 	if VERBOSE : normed_vals.to_csv('normed_vals.csv')
 	# maxCoin = normed_vals[-1:].idxmax(axis=1)[0]
 	order = np.argsort(-normed_vals.values, axis=1)[-1:, :3][0]
@@ -121,26 +143,32 @@ def get_max_close(normed_vals):
 
 def get_rolling_mean(values, window = 20):
 	"""Return rolling mean of given values, using specified window size."""
+	logging.debug('Entered get_rolling_mean()')
 	return values.rolling(window, center=False).mean()
 
 
 def get_rolling_std(values, window = 20):
+	logging.debug('Entered get_rolling_std()')
 	"""Return rolling standard deviation of given values, using specified window size."""
 	return values.rolling(window, center=False).std()
 
 
 def get_bollinger_bands(rm, rstd, degrees):
 	"""Return upper and lower Bollinger Bands."""
+	logging.debug('Entered get_bollinger_bands')
+
 	upper_band = rm + rstd * degrees
 	lower_band = rm - rstd * degrees
 	return upper_band, lower_band
 
 def send_sms(message):
 	"""Send sms to myself using Twilio"""
+	logging.debug('Entered send_sms %s', str(message))
 	twilio = tw(AccountSID, AuthToken, MyNumber, TwilioNumber)
 	twilio.send_sms(message)
 
 def send_email(message, maxCoins, timestamp):
+	logging.debug('Entered send_email %s', str(message))
 	server   = smtp.SMTP('smtp.gmail.com:587')
 	# create a message
 	msg      = MIMEMultipart()
@@ -164,11 +192,15 @@ def send_email(message, maxCoins, timestamp):
 	server.quit()
  
 def set_timer(onFire):
+
+	logging.debug('Entered set_timer %s', str(onFire))
 	schedule = sched.scheduler(time.time, time.sleep)
 	schedule.enter(TIMER, 1, onFire, ())
 	schedule.run()
 
 def plot_data(dfs, maxCoins, timestamp):
+
+	logging.debug('Entered plot_data %s', str(dfs.count))
 	i = 0
 	for coin in maxCoins:
 		# Get rolling measurements, and Bollinger Bands
@@ -199,12 +231,14 @@ def plot_data(dfs, maxCoins, timestamp):
 		i+=1
 
 def get_close_chart(coin, timestamp):
+
+	logging.debug('Entered get_close_chart %s', str(coin))
 	# polo = poloniex(APIKey, Secret)
 	# Get chart data for the coin's close prices, clean it up a little and return
-	df = pd.DataFrame(polo.returnChartData(coin, timestamp - 86400, timestamp, '300'))
+	df = pd.DataFrame(polo.returnChartData(coin, timestamp - DATA_PERIOD, timestamp, '300'))
 	df['date'] = pd.to_datetime(df["date"], unit='s')
 	df.set_index(['date'], inplace=True)
-	df = df.tz_localize('UTC').tz_convert('America/New_York')
+	df = df.tz_localize('UTC').tz_convert(TIME_ZONE)
 	df.index = df.index.strftime('%-m/%-d/%y %-H:%M')
 	df = df[['close']]
 	df.rename(columns={"close": coin}, inplace=True)
