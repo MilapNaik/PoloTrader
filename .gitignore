@@ -1,3 +1,5 @@
 secrets.json
-*.pyc
 graphs/
+*.pyc
+*.csv
+*.log
